@@ -1,0 +1,6 @@
+[submodule "STARS/problems/YATSOp"]
+	path = STARS/problems/YATSOp
+	url = https://github.com/POptUS/YATSOp
+[submodule "STARS/problems/BenDFO"]
+	path = STARS/problems/BenDFO
+	url = https://github.com/POptUS/BenDFO

@@ -1,4 +1,5 @@
 # RanDFO -- A Collection of Randomized Algorithms for Derivative-Free Optimization
+![GitHub](https://img.shields.io/github/license/poptus/randfo) 
 
 Currently available are:
 

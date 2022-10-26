@@ -1,6 +1,8 @@
 *****
 # STARS algorithm for stochastic derivative-free optimization
 *****
+![GitHub](https://img.shields.io/github/license/poptus/randfo) [![miss_hit](https://github.com/POptUS/RanDFO/actions/workflows/miss_hit.yml/badge.svg)](https://github.com/POptUS/RanDFO/actions/workflows/miss_hit.yml)
+
 [STARS](https://arxiv.org/abs/2207.06452) is an extension of [STORM](https://doi.org/10.1007/s10107-017-1141-8) to random subspaces, and a stochastic variant of a simplified version of [RSDFO](https://doi.org/10.1007/s10107-022-01836-1). It is developed for the optimization of stochastically noisy objective functions in large dimensions, that is, whose values can be computed through a blackbox corrupted with random noise. It is a trust-region algorithm which takes as input a vector of decision variables, and which achieves scalability using random models constructed in low-dimensional affine subspaces.
 
 ## Prerequisites

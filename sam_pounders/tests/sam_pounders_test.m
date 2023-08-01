@@ -52,8 +52,10 @@ sam_pounders(fun, X0, n, npmax, nfmax, gtol, delta, nfs, m, F0, xkin, L, U, sket
 nf = length(ncf_vec);
 last = 0;
 for j = 1:nf
-    Hf(1, (last + 1):min(ncf_vec(j),nfmax)) = hfun(fun(X(j, :), 1:m));
-    last = ncf_vec(j); 
+    if ncf_vec(j) > 0
+        Hf(1, (last + 1):min(ncf_vec(j),nfmax)) = hfun(fun(X(j, :), 1:m));
+        last = ncf_vec(j);
+    end
 end
 % now do POUNDERS
 if strcmp(problem,'rosenbrock')

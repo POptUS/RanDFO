@@ -1,8 +1,11 @@
 function run_experiment7(macro_seed, problem, m)
 
 test_types = {'balanced', 'progressive', 'imbalanced'};
+macro_seed = str2num(macro_seed);
+m = str2num(m);
 n = m;
 sketchsize = []; 
+
 
 for j = 1:3
     test_type = test_types{j};

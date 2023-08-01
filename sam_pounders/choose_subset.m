@@ -53,16 +53,16 @@ function [to_update, probs, V] = choose_subset(X, Cres, xkin, centers, old_delta
 %              [probs, V] = computeProbs(sketchsize, errors);
 
              mu = 0.05;
-             c = 1;%0.1;
+             c = 0.0;
              %c = n;
              %c = m * n * min(Lip);
              %kappa = mu * (min(1.0,delta))^4; 
              if strcmp(sense,'f')
-                %sketchsize = m;
-                %probs = ones(m,1);
-                %V = 0;
-                kappa = mu * c^2 * (min(1.0,delta))^4;
-                [sketchsize,probs,V] = chooseSketchSizeandProbs(kappa, errors);
+                sketchsize = m;
+                probs = ones(m,1);
+                V = 0;
+                %kappa = mu * c^2 * (min(1.0,delta))^4;
+                %[sketchsize,probs,V] = chooseSketchSizeandProbs(kappa, errors);
              elseif strcmp(sense,'m')
                 kappa = mu * (min(1.0,delta))^4;
                 [sketchsize,probs,V] = chooseSketchSizeandProbs(kappa, errors);

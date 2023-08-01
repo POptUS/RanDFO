@@ -7,7 +7,7 @@ addpath('../../../IBCDFO/minq/m/minq5')
 
 
 if strcmp(test_type,'imbalanced')
-    alpha = ones(1,n); alpha(n/2) = n^2;
+    alpha = ones(1,n); alpha(n/2) = n;
 elseif strcmp(test_type,'balanced')
     alpha = ones(1,n);
 elseif strcmp(test_type,'progressive')

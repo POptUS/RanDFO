@@ -114,13 +114,15 @@ else
 end
 
 valid = zeros(1, m);
+first_success = false;
+second_success = false;
 
 while ncf < nfmax
     nf_start = nf; % for condenser
     % Step 1: Choose a subset to update
-    if nf < n
+    if ~first_success || ~second_success
         models_to_update = (1:m)'; 
-        probs = ones(1, m); 
+        probs = ones(1, m);   
     else
          [models_to_update, probs, Vm] = ... 
              choose_subset(X, Cres, xkin, centers, old_delta, delta, combinemodels, Lip, 'm', sketchsize, ng);
@@ -328,6 +330,11 @@ while ncf < nfmax
 
         % 4a. Update the center
         if (rho >= eta1)  || ((rho > 0) && all(valid))
+            if ~first_success 
+                first_success = true;
+            elseif first_success && ~second_success
+                second_success = true;
+            end  
             %  Update model to reflect new center
             xkin = ind; % Change current center
             valid = zeros(1, m);

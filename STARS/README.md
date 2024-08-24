@@ -34,7 +34,7 @@ If you use [STARS](https://doi.org/10.1137/22M1524072), please cite the followin
 
 
 ```
-@article{DzaWildSub2022,
+@article{DzaWildSub2024,
 	Author    = {Kwassi Joseph Dzahini and Stefan M. Wild},
 	Title     = {Stochastic Trust-Region Algorithm in Random Subspaces with Convergence and Expected Complexity Analyses},
 	Journal   = {SIAM Journal on Optimization},

@@ -3,7 +3,7 @@
 % https://github.com/POptUS/BenDFO
 % which is automatically loaded in this repo as a submodule.
 %
-%% [1] STARS paper: 
+%% [1] STARS paper:
 %%    https://doi.org/10.1137/22M1524072
 %%    https://arxiv.org/abs/2207.06452
 %% To cite the STARS paper, see Readme.md

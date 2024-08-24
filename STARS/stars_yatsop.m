@@ -1,12 +1,14 @@
 %% IMPORTANT NOTE:
 % The 40 problems considered by this script are available via
-% https://github.com/POptUS/YATSOp or by emailing poptus@mcs.anl.gov if
-% the latter link is unavailable (In case the repository is not yet public).
+% https://github.com/POptUS/YATSOp
 % YATSOp should be automatically loaded in this repo as a submodule.
 %
-%% [1] STARS algorithm: (https://arxiv.org/abs/2207.06452)
+%% [1] STARS paper:
+%%    https://doi.org/10.1137/22M1524072
+%%    https://arxiv.org/abs/2207.06452
 %% To cite the STARS paper, see Readme.md
-%%
+%% at https://github.com/POptUS/RanDFO
+%
 % This script runs STARS in an automated way on the 40 problems considered
 % in the numerical section of [1], for various types of noise, noise levels
 % and subspace dimensions. It generates solutions/stats/history files
@@ -66,10 +68,10 @@ pvals = [1, 2, 5, 10, 20, 30, 40, 50, 100];
 sigmavals = [1, 2, 3, 4, 5, 6, 7, 8];   %  See probspecs.sigma below
 
 %% Loop on subspace dimensions
-for index_p = 2%:length(pvals)      % Indices for subspace dimension in pvals (above)
+for index_p = 2 % :length(pvals)      % Indices for subspace dimension in pvals (above)
 
     %% Loop on the noise levels
-    for ind_sigma = 3%:length(sigmavals)   % Indices in sigmavals (above) for the standard deviation
+    for ind_sigma = 3 % :length(sigmavals)   % Indices in sigmavals (above) for the standard deviation
                         % Sigma (see probspecs.sigma below)
 
         % One must define ind.prob, ind.sigma, ind.seed

@@ -4,7 +4,7 @@
 Currently available are:
 
 * [STARS](STARS) a randomized algorithm for large-scale derivative-free stochastic optimization  
-Implemented in Matlab/Octave and described in [Arxiv:2207.06452](https://arxiv.org/abs/2207.06452) 
+Implemented in Matlab/Octave and described in [the STARS paper](https://doi.org/10.1137/22M1524072) 
 
 
 ## Submodules

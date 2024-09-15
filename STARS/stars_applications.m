@@ -42,16 +42,16 @@ stars_option.experiments = 0; % Warning: do not comment!!
 
 stars_option.DisplayOutputs = 1;
 stars_option.DisplaySolution = 1;
-stars_option.FiniteDiffParam = 0.01;
-stars_option.FixSeed = 0;
+stars_option.FixSeed = 1;
 stars_option.HashingParam = 1;
 stars_option.HistoryFile = 1;           % See comments above on output files
 stars_option.MaxFuncEval = 3000;
+stars_option.ModelLevel = 0;
 stars_option.SampleSize = 2;            % (Very small value provided here!!)
 stars_option.SolutionFile = 1;
 stars_option.StatsFile = 1;
 stars_option.SubspaceDim = 1;
-stars_option.SubspaceMatrix = 0;
+stars_option.SubspaceMatrix = 3;
 stars_option.UsePreviousSamples = 1;
 
 %%

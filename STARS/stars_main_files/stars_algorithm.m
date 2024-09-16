@@ -193,8 +193,8 @@ for iteration = 1:MaxIter
             if length(f_poised) == size(poised_set, 2) + 1
                 rho = (CurObj - funct_estm3) / (-GradApprox' * TrialStep);
             else
-                rho = (CurObj - funct_estm3) / (quad_model(zeros(size(poised_set, 2), 1)) ...
-                    - quad_model(TrialStep));
+                rho = (CurObj - funct_estm3) / (quad_model(zeros(size(poised_set, 2), 1)) - ...
+                    quad_model(TrialStep));
             end
             if (rho >= eta1) && (NormGrad  >= eta2 * TRadius)   % (Success)
                 if stars_option.UsePreviousSamples == 1

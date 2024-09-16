@@ -110,7 +110,7 @@ for iteration = 1:MaxIter
     else
         subspace_matrix = hashing_matrix(hash_param, prob_dim, sub_dim)';
     end
-    
+
     %% Approximation of the objective function value at the current solution
     % (required to estimate the gradient below)
     funct_estm1 = MCestimate(cur_sol, SamplSze, funs, stars_option);
@@ -131,7 +131,7 @@ for iteration = 1:MaxIter
     else
         break
     end
-    
+
     %% Model building
     % Interpolation points are the rows of poised_set
     poised_set = Algorithm_6_4(zeros(1, sub_dim), max(c_param * TRadius, 1e-100), CurObj);
@@ -160,7 +160,7 @@ for iteration = 1:MaxIter
     else
         [GradApprox, Hessian] = fitfroquad(poised_set, f_poised);
     end
-    
+
     if isrow(GradApprox)
         GradApprox = GradApprox';
     end
@@ -171,7 +171,7 @@ for iteration = 1:MaxIter
         if length(f_poised) == size(poised_set, 2) + 1
             TrialStep = -TRadius * GradApprox / NormGrad;
         else
-            TrialStep = bqmin(Hessian, GradApprox, -TRadius * ones(size(poised_set, 2), 1),...
+            TrialStep = bqmin(Hessian, GradApprox, -TRadius * ones(size(poised_set, 2), 1), ...
                 TRadius * ones(size(poised_set, 2), 1));
         end
         if isrow(TrialStep)
@@ -193,7 +193,8 @@ for iteration = 1:MaxIter
             if length(f_poised) == size(poised_set, 2) + 1
                 rho = (CurObj - funct_estm3) / (-GradApprox' * TrialStep);
             else
-                rho = (CurObj - funct_estm3) / (quad_model(zeros(size(poised_set, 2), 1)) - quad_model(TrialStep));
+                rho = (CurObj - funct_estm3) / (quad_model(zeros(size(poised_set, 2), 1)) ...
+                    - quad_model(TrialStep));
             end
             if (rho >= eta1) && (NormGrad  >= eta2 * TRadius)   % (Success)
                 if stars_option.UsePreviousSamples == 1

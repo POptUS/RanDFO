@@ -1,35 +1,31 @@
-function [G,H] = fitfroquad(poised_set,f_poised)
+function [G, H] = fitfroquad(poised_set, f_poised)
 % These assumed that you are inputing at least n+2 poised points.
 warning('off', 'all');
-n =size(poised_set,2);
+n = size(poised_set, 2);
 
 N = zeros(.5 * n * (n + 1), n + 1);
 for np = 1:n + 1
     N(:, np) = phi2eval(poised_set(np, :))';
 end
 
-M = [ones(n + 1, 1) poised_set(1:n+1, :)]';
+M = [ones(n + 1, 1) poised_set(1:n + 1, :)]';
 [Q, R] = qr(M');
 
+for i = n + 2:size(poised_set, 1)
 
-
-for i=n+2:size(poised_set,1)
-    
     Ny = [N phi2eval(poised_set(i, :))'];
     [Qy, Ry] = qrinsert(Q, R, np + 1, [1 poised_set(i, :)], 'row'); % Update QR
     Ly = Ny * Qy(:, n + 2:np + 1);
-    
-    
+
     np = np + 1;
     N = Ny;
     Q = Qy;
     R = Ry;
     L = Ly;
-    
+
     Z = Q(:, n + 2:np);
     M = [M [1; poised_set(i, :)']]; % Note that M is growing
 end
-
 
 % For L=N*Z, solve L'*L*Omega = Z'*f_poised:
 Omega = L' \ (Z' * f_poised(:));

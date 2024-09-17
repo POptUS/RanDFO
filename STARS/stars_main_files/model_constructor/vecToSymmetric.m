@@ -9,7 +9,7 @@ function H = vecToSymmetric(h, n)
 
     H = zeros(n, n);
     idx = 1;
-    
+
     % Fill the upper triangular part (including diagonal) of H
     for i = 1:n
         for j = i:n

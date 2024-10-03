@@ -19,7 +19,7 @@ main_files_location = 'stars_main_files';
 addpath([main_files_location, '/']);
 addpath([main_files_location, '/CSV_DFO/']);
 addpath([main_files_location, '/Pounders_files/']);
-addpath([main_files_location, '/Model_constructor/']);
+addpath([main_files_location, '/model_constructor/']);
 
 % Locations of the two dependencies (loaded as submodules)
 bendfo_location = 'problems/BenDFO';

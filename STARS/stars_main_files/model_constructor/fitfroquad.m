@@ -7,7 +7,7 @@ M = [ones(n + 1, 1) poised_set(1:n + 1, :)]';
 
 if size(poised_set, 1) == n + 1
     H = zeros(n, n);
-    B = M' \ f_poised(:)
+    B = M' \ f_poised(:);
     G = B(2:n + 1);
 
 elseif size(poised_set, 1) > n + 1

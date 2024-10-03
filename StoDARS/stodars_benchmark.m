@@ -66,20 +66,20 @@ probnames = {'smooth', 'absnormal', 'absuniform', 'reluniform', ...
 sigmavals = [1, 2, 3, 4, 5, 6, 7, 8];   %  See probspecs.sigma below
 
 %% Loop on the noise levels
-for ind_sigma = 3%:length(sigmavals)     % Indices in sigmavals (above) for the standard deviation
+for ind_sigma = 3 % :length(sigmavals)     % Indices in sigmavals (above) for the standard deviation
     %                                      Sigma (see probspecs.sigma below)
-    
+
     % One must define ind.prob, ind.sigma, ind.seed
     ind.seed = 1;
     ind.prob = 4;  % Index corresponding to the type of problem in probnames (above)
     %                for example, 4 corresponds to 'reluniform'
     ind.sigma = ind_sigma;        % See probspecs.sigma below
-    
+
     %% Define probtype and noiselevel
     % (These will not change across the 53 problems)
     probtype = probnames{ind.prob};
     probspecs.sigma = 10^(-sigmavals(ind.sigma));
-    
+
     %% Loop on the 53 problems
     for nprobl = 1:numprobs
         %% Initialize the rest of the problem specifications specific to problem nprobl
@@ -89,7 +89,7 @@ for ind_sigma = 3%:length(sigmavals)     % Indices in sigmavals (above) for the 
         probspecs.n = dfo(nprobl, 2);
         probspecs.m = dfo(nprobl, 3);
         probspecs.probtype = probtype; % This is needed for the output files
-        
+
         %% Initialize the algorithm options (see stodars_default_options.m for details)
         stodars_option.DisplayOutputs = 1;
         stodars_option.DisplaySolution = 0;
@@ -101,14 +101,14 @@ for ind_sigma = 3%:length(sigmavals)     % Indices in sigmavals (above) for the 
         stodars_option.StatsFile = 1;
         stodars_option.SubspaceDim = 2;
         stodars_option.UsePreviousSamples = 1;
-        
+
         %%  Get starting point
         X0 = dfoxs(probspecs.n, probspecs.nprob, 10^probspecs.factor_power); % starting point
-        
+
         %% Define a function that takes column vector input
         funs.myfun = @(x)calfun(x, probspecs, probspecs.probtype);
         funs.mysmoothfun = @(x)calfun(x, probspecs, 'smooth');
-        
+
         %% Run optimization  (see stodars_algorithm.m in 'stodars_main_files' folder)
         X = stodars_algorithm(funs, X0, stodars_option, probspecs);
     end

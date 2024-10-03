@@ -68,7 +68,7 @@ sigmavals = [1, 2, 3, 4, 5, 6, 7, 8];   %  See probspecs.sigma below
 %% Loop on the noise levels
 for type_val = 4:5
     for repl = 1:20
-        for ind_sigma = 3 %:length(sigmavals)     % Indices in sigmavals (above) for the standard deviation
+        for ind_sigma = 3 % :length(sigmavals)     % Indices in sigmavals (above) for the standard deviation
             %                                      Sigma (see probspecs.sigma below)
             % One must define ind.prob, ind.sigma, ind.seed
             ind.seed = 1;

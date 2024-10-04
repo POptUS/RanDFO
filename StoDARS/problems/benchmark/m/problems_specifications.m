@@ -1,4 +1,4 @@
-% This file is used in stars_benchmark.m to manage the display of results.
+% This file is used in stodars_benchmark.m to manage the display of results.
 %
 %  Argonne National Laboratory, Mathematics and Computer Science Division (USA)
 %

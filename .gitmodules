@@ -4,3 +4,9 @@
 [submodule "STARS/problems/BenDFO"]
 	path = STARS/problems/BenDFO
 	url = https://github.com/POptUS/BenDFO
+[submodule "StoDARS/problems/BenDFO"]
+	path = StoDARS/problems/BenDFO
+	url = https://github.com/POptUS/BenDFO.git
+[submodule "StoDARS/problems/YATSOp"]
+	path = StoDARS/problems/YATSOp
+	url = https://github.com/POptUS/YATSOp.git

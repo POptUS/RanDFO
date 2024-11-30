@@ -16,16 +16,16 @@ function z = stars_algorithm(funs, x0, stars_option, probspecs)
 if nargin == 3
     probspecs = struct('Dimension', 'n');
     probspecs.Dimension = length(x0);
-    probspecs.hopt = stars_option.FiniDiffParam;
 end
+c_param = stars_option.InflationParam;
 gamma = stars_option.Gamma;
 eta1 = stars_option.EtaOne;
 eta2 = stars_option.EtaTwo;
 TRadius = stars_option.InitRegionRadius;
 TRmax = stars_option.MaxRegionRadius;
 cur_sol = x0;
-nn = length(x0);
-pp = ceil(stars_option.SubspaceDim);
+prob_dim = length(x0);
+sub_dim = ceil(stars_option.SubspaceDim);
 MaxIter = stars_option.MaxNumberIters;
 JLMType = stars_option.SubspaceMatrix;
 SamplSze = stars_option.SampleSize;
@@ -97,12 +97,18 @@ end
 
 for iteration = 1:MaxIter
     if JLMType == 0
-        subspace_matrix = Gaussian_matrix(nn, pp)';
+        subspace_matrix = Gaussian_matrix(prob_dim, sub_dim)';
     elseif JLMType == 2
-        pp = nn;    % Then Q is square and full space is considered
-        subspace_matrix = eye(pp);
+        sub_dim = prob_dim;    % Q is square and full space is considered
+        subspace_matrix = eye(sub_dim);
+    elseif JLMType == 3
+        haar_matrix = haar_orthog_matrix(prob_dim);
+        subspace_matrix = sqrt(prob_dim / sub_dim) * haar_matrix(:, 1:sub_dim);
+    elseif JLMType == 4
+        haar_matrix = haar_orthog_matrix(prob_dim);
+        subspace_matrix = haar_matrix(:, 1:sub_dim); % Without the factor sqrt(prob_dim/sub_dim)
     else
-        subspace_matrix = hashing_matrix(hash_param, nn, pp)';
+        subspace_matrix = hashing_matrix(hash_param, prob_dim, sub_dim)';
     end
 
     %% Approximation of the objective function value at the current solution
@@ -126,15 +132,22 @@ for iteration = 1:MaxIter
         break
     end
 
-    %% Gradient approximation in subspace
-    GradApprox = zeros(pp, 1);
-    forw_finite_diff_param = min(probspecs.hopt, TRadius);
-    for i_g = 1:pp
-        funct_estm2 = MCestimate(cur_sol + forw_finite_diff_param * subspace_matrix(:, i_g), ...
-            SamplSze, funs, stars_option);
-        if funct_estm2 ~= 1i
-            GradApprox(i_g) = (funct_estm2 - CurObj) / forw_finite_diff_param;
-        else
+    %% Model building
+    % Interpolation points are the rows of poised_set
+    poised_set = Algorithm_6_4(zeros(1, sub_dim), max(c_param * TRadius, 1e-100), CurObj);
+    if stars_option.ModelLevel > 0
+        ps = stars_option.ModelLevel;
+        if sub_dim + ps > size(poised_set, 1)
+            ps = size(poised_set, 1) - sub_dim;
+        end
+        poised_set = poised_set(1:(sub_dim + ps), :);
+    end
+    f_poised = CurObj;
+    for idf = 2:size(poised_set, 1)
+        aff_sub_point = cur_sol + subspace_matrix * poised_set(idf, :)';
+        f_poised = [f_poised; MCestimate(aff_sub_point, SamplSze, funs, stars_option)];
+        f_poised_end = f_poised(end);
+        if f_poised_end == 1i
             nfEvalExceeded = 1;
             break
         end
@@ -142,10 +155,28 @@ for iteration = 1:MaxIter
     if nfEvalExceeded == 1
         break
     end
-    %% Solution of the Trust-Region subproblem (using linear models)
+    if length(f_poised) == size(poised_set, 2) + 1
+        [~, GradApprox, Hessian] = MinFrobQuadMod(poised_set, f_poised);
+    else
+        [GradApprox, Hessian] = fitfroquad(poised_set, f_poised);
+    end
+
+    if isrow(GradApprox)
+        GradApprox = GradApprox';
+    end
+    quad_model = @(s)(CurObj + GradApprox' * s + 0.5 * s' * Hessian * s);
+    %% Solution of the Trust-Region subproblem
     NormGrad = norm(GradApprox);
     if NormGrad ~= 0
-        TrialStep = -(GradApprox / NormGrad) * TRadius;
+        if length(f_poised) == size(poised_set, 2) + 1
+            TrialStep = -TRadius * GradApprox / NormGrad;
+        else
+            TrialStep = bqmin(Hessian, GradApprox, -TRadius * ones(size(poised_set, 2), 1), ...
+                TRadius * ones(size(poised_set, 2), 1));
+        end
+        if isrow(TrialStep)
+            TrialStep = TrialStep';
+        end
         TrialPoint = cur_sol + subspace_matrix * TrialStep;
         %% Check whether trial point violates bound constraints or not
         if (sum(TrialPoint < lw_bounds) > 0) || (sum(TrialPoint > up_bounds) > 0) % ('Failure'!!)
@@ -154,13 +185,17 @@ for iteration = 1:MaxIter
                 Failure_flag = 1;
             end
         else
-            funct_estm3 = MCestimate(cur_sol + subspace_matrix * TrialStep, SamplSze, funs, ...
-                stars_option);
+            funct_estm3 = MCestimate(TrialPoint, SamplSze, funs, stars_option);
             if funct_estm3 == 1i
                 break
             end
             %% Trust-Region ratio
-            rho = (funct_estm3 - CurObj) / (GradApprox' * TrialStep);
+            if length(f_poised) == size(poised_set, 2) + 1
+                rho = (CurObj - funct_estm3) / (-GradApprox' * TrialStep);
+            else
+                rho = (CurObj - funct_estm3) / (quad_model(zeros(size(poised_set, 2), 1)) - ...
+                    quad_model(TrialStep));
+            end
             if (rho >= eta1) && (NormGrad  >= eta2 * TRadius)   % (Success)
                 if stars_option.UsePreviousSamples == 1
                     Success_flag = 1;

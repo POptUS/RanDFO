@@ -106,11 +106,12 @@ for index_p = 2 % :length(pvals)      % Indices for subspace dimension in pvals 
             stars_option.HistoryFile = 1;
             stars_option.MaxFuncEval = 100000;
             stars_option.MaxRegionRadius = 5;
+            stars_option.ModelLevel = 0;
             stars_option.SubspaceDim = min(probspecs.n, pvals(ind.p));
-            stars_option.SampleSize = 25;
+            stars_option.SampleSize = 1;
             stars_option.SolutionFile = 0;
             stars_option.StatsFile = 0;
-            stars_option.SubspaceMatrix = 1;
+            stars_option.SubspaceMatrix = 3;
             stars_option.UsePreviousSamples = 1;
 
             %%  Get starting point and problem name

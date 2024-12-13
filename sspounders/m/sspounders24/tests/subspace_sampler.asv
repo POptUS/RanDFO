@@ -1,0 +1,17 @@
+function Q = subspace_sampler(S, sample_size)
+
+    A = randn(n, sample_size);
+    
+    if ~isempty(S)
+        A  = A - S * (S' * A);
+    end
+        
+    n = size(S, 1);
+
+    A = randn(n, sample_size);
+
+    A  = A - S * (S' * A);
+
+    [Q, ~] = qr(A);
+
+end

@@ -1,0 +1,424 @@
+% POUNDerS Version 0.1,    Modified 04/9/2010. Copyright 2010
+% Stefan Wild and Jorge More', Argonne National Laboratory.
+
+function [X, F, hF, flag, xk_in] = subspace_pounders(Ffun, X_0, n, nf_max, g_tol, delta_0, m, random_sketchsize, ucb_sketchsize, memory, Low, Upp, Prior, Options, Model)
+
+% Check for missing arguments and initialize if necessary
+if nargin < 15 || isempty(Model)
+    Model = struct();
+end
+if nargin < 14 || isempty(Options)
+    Options = struct();
+end
+if nargin < 13 || isempty(Prior)
+    Prior = struct();
+    Prior.nfs = 0;
+    Prior.X_init = [];
+    Prior.F_init = [];
+    Prior.xk_in = 1;
+end
+
+if ~isstruct(Options)
+    error("Options must be a struct");
+end
+if ~isstruct(Prior)
+    error("Prior must be a struct");
+end
+if ~isstruct(Model)
+    error("Model must be a struct");
+end
+
+if ~isfield(Options, 'delta_max')
+    Options.delta_max = min(.5 * min(Upp - Low), 1e3 * delta_0); % [dbl] Maximum tr radius
+end
+if ~isfield(Options, 'delta_min')
+    Options.delta_min = min(delta_0 * 1e-13, g_tol / 10); % [dbl] Min tr radius (technically 0)
+end
+if ~isfield(Options, 'gamma_dec')
+    Options.gamma_dec = .5; % [dbl] Parameter in (0,1) for shrinking delta  (.5)
+end
+if ~isfield(Options, 'gamma_inc')
+    Options.gamma_inc = 2;  % [dbl] Parameter (>=1) for enlarging delta   (2)
+end
+if ~isfield(Options, 'eta_1')
+    Options.eta_1 = .05;     % [dbl] Parameter for accepting point, 0<eta_1<1 (.2)
+end
+if ~isfield(Options, 'delta_inact')
+    Options.delta_inact = 0.75;
+end
+if ~isfield(Options, 'spsolver')
+    Options.spsolver = 2;
+end
+
+if isfield(Options, 'hfun')
+    hfun = Options.hfun;
+    combinemodels = Options.combinemodels;
+else
+    % Use least-squares hfun by default
+    [here_path, ~, ~] = fileparts(mfilename('fullpath'));
+    addpath(fullfile(here_path, '..', general_h_funs'));
+    hfun = @(F)sum(F.^2);
+    combinemodels = @leastsquares;
+end
+if ~isfield(Options, 'spsolver')
+    Options.spsolver = 2; % Use minq5 by default
+end
+if ~isfield(Options, 'printf')
+    Options.printf = 0; % Don't print by default
+end
+
+if ~isfield(Model, 'np_max')
+    Model.np_max = 2 * n + 1;
+end
+if ~isfield(Model, 'Par')
+    Model.Par = zeros(1, 4);
+
+    Model.Par(1) = sqrt(n); % [dbl] delta multiplier for checking validity
+    Model.Par(2) = max(10, sqrt(n)); % [dbl] delta multiplier for all interp. points
+    Model.Par(3) = 1e-5;  % [dbl] Pivot threshold for validity (1e-5)
+    Model.Par(4) = 1e-3;  % [dbl] Pivot threshold for additional points (.001)
+end
+
+delta = delta_0;
+spsolver = Options.spsolver;
+delta_max = Options.delta_max;
+delta_min = Options.delta_min;
+gamma_dec = Options.gamma_dec;
+gamma_inc = Options.gamma_inc;
+eta_1 = Options.eta_1;
+printf = Options.printf;
+delta_inact = Options.delta_inact;
+
+if     spsolver == 2 % Arnold Neumaier's minq5
+    [here_path, ~, ~] = fileparts(mfilename('fullpath'));
+    minq_path = fullfile(here_path, '..', '..', '..', '..', 'minq');
+    addpath(fullfile(minq_path, 'm', 'minq5'));
+elseif spsolver == 3 % Arnold Neumaier's minq8
+    [here_path, ~, ~] = fileparts(mfilename('fullpath'));
+    minq_path = fullfile(here_path, '..', '..', '..', 'minq');
+    addpath(fullfile(minq_path, 'm', 'minq8'));
+end
+
+% 0. Check inputs
+nfs = Prior.nfs;
+[flag, X_0, np_max, F0, Low, Upp, xk_in] = ...
+    checkinputss(Ffun, X_0, n, Model.np_max, nf_max, g_tol, delta, nfs, m, Prior.F_init, Prior.xk_in, Low, Upp);
+if flag == -1 % Problem with the input
+    X = [];
+    F = [];
+    hF = [];
+    return
+end
+
+% --INTERNAL PARAMETERS [won't be changed elsewhere, defaults in ( ) ]-----
+if printf
+    disp('  nf   delta        f0      sub_dim       ng ');
+    progstr = '%4i %9.2e  %11.5e  %4i  %11.5e \n'; % Line-by-line
+end
+% -------------------------------------------------------------------------
+
+% --INTERMEDIATE VARIABLES-------------------------------------------------
+% D       [dbl] [1-by-n] Generic displacement vector
+% G       [dbl] [n-by-1] Model gradient at X(xk_in,:)
+% H       [dbl] [n-by-n] Model Hessian at X(xk_in,:)
+% Hdel    [dbl] [n-by-n] Change to model Hessian at X(xk_in,:)
+% Lows    [dbl] [1-by-n] Vector of subproblem lower bounds
+% Upps    [dbl] [1-by-n] Vector of subproblem upper bounds
+% Mdir    [dbl] [n-by-n] Unit row directions to improve model/geometry
+% Mind    [int] [np_max-by-1] Integer vector of model interpolation indices
+% Xsp     [dbl] [1-by-n] Subproblem solution
+% c       [dbl] Model value at X(xk_in,:)
+% mdec    [dbl] Change predicted by the model, m(nf)-m(xk_in)
+% nf      [int] Counter for the number of function evaluations
+% ng      [dbl] Norm of (projection of) G
+% np      [int] Number of model interpolation points
+% rho     [dbl] Ratio of actual decrease to model decrease
+% valid   [log] Flag saying if model is fully linear within Par(1)*delta
+% -------------------------------------------------------------------------
+
+if nfs == 0 % Need to do the first evaluation
+    X = [X_0; zeros(nf_max - 1, n)]; % Stores the point locations
+    F = zeros(nf_max, m); % Stores the function values
+    hF = zeros(nf_max, 1); % Stores the sum of squares of evaluated points
+    nf = 1;
+    F0 = Ffun(X(nf, :));
+    if length(F0) ~= m
+        disp('  Error: F0 does not contain the right number of residuals');
+        flag = -1;
+        return
+    end
+    F(nf, :) = F0;
+    if any(isnan(F(nf, :)))
+        [X, F, hF, flag] = prepare_outputs_before_return(X, F, hF, nf, -3);
+        return
+    end
+    if printf
+        fprintf('%4i    Initial point  %11.5e\n', nf, hfun(F(nf, :)));
+    end
+else % Have other function values around
+    X = [X_0(1:nfs, :); zeros(nf_max, n)]; % Stores the point locations
+    F = [F0(1:nfs, :); zeros(nf_max, m)]; % Stores the function values
+    hF = zeros(nf_max + nfs, 1); % Stores the sum of squares of evaluated points
+    nf = nfs;
+    nf_max = nf_max + nfs;
+end
+for i = 1:nf
+    hF(i) = hfun(F(i, :));
+end
+
+ng = NaN; % Needed for early termination, e.g., if a model is never built
+
+% storage for UCB
+regularizer = 1.0 / n;
+rhs = zeros(n, 1);
+mean_bandit = zeros(n, 1);
+ub = 0; ub_lr = 0.2; 
+sketch_dictionary = {};
+
+% testing things
+threshold = 0.1; % currently unused.
+max_sketchsize = n;
+
+while nf < nf_max && delta > delta_min
+    %new_sketch = []; 
+    %sketched_grad = [];
+    %% 1a. Choose a subspace and build a quadratic model on it. 
+
+    % First decompose the subspaces into S and Sperp
+    [Sperp, sub_dim, S, B, Mind, sub_xk_in] = choose_subspaces(X(1:nf, :), delta, xk_in, Model.Par, max_sketchsize);
+
+    % UCB sampling
+    ucb_subset = computeUCBsubset(mean_bandit, sketch_dictionary, regularizer, Sperp, ub * sqrt(regularizer), threshold, ucb_sketchsize);   
+
+    % Evaluate the function at points suggested by Sperp and subset,
+    for j = ucb_subset
+        % box projection would be done here - currently unimplemented, future
+        % work
+        nf = nf + 1;
+        X(nf, :) = min(Upp, max(Low, X(xk_in, :) + delta * Sperp(j, :))); % Temp safeguard
+        F(nf, :) = Ffun(X(nf, :));
+        if any(isnan(F(nf, :)))
+            [X, F, flag] = prepare_outputs_before_return(X, F, nf, -3);
+            return
+        end
+        hF(nf) = hfun(F(nf, :));
+        Mind = [Mind, nf]; 
+        %% by finite differences: 
+        %sketched_grad = cat(1, sketched_grad, (hF(nf) - hF(xk_in)) / delta);
+        %new_sketch = cat(1, new_sketch, delta * Sperp(j, :));
+    end
+
+    % Increment S
+    Snew = Sperp(ucb_subset, :);
+    S = [S Snew'];
+
+     % Random sampling
+    random_S = subspace_sampler(S, min(random_sketchsize, n - sub_dim - length(ucb_subset))); 
+    random_sub_dim = min(random_sketchsize, n - sub_dim - length(ucb_subset)); 
+
+        % Evaluate the function at points suggested by Sperp and subset,
+    for j = 1:random_sub_dim
+        % box projection would be done here - currently unimplemented, future
+        % work
+        nf = nf + 1;
+        X(nf, :) = min(Upp, max(Low, X(xk_in, :) + delta * random_S(:, j)')); % Temp safeguard
+        F(nf, :) = Ffun(X(nf, :));
+        if any(isnan(F(nf, :)))
+            [X, F, flag] = prepare_outputs_before_return(X, F, nf, -3);
+            return
+        end
+        hF(nf) = hfun(F(nf, :));
+        Mind = [Mind, nf]; 
+        %% by finite differences: 
+        %sketched_grad = cat(1, sketched_grad, (hF(nf) - hF(xk_in)) / delta);
+        %new_sketch = cat(1, new_sketch, delta * random_S(:, j)');
+    end
+
+    new_dim = length(ucb_subset) + random_sub_dim;
+    sub_dim = sub_dim + new_dim;
+
+    % Increment S with random sample
+    S = [S random_S]; 
+
+    % Fix up B
+    if size(B, 1) == 0 % special case
+        B = [zeros(1, sub_dim); delta * eye(sub_dim)];
+    else
+        B = [B zeros(size(B, 1), new_dim); ...
+        zeros(new_dim, size(B,2)), delta * eye(new_dim)];
+    end
+    
+    % Call formquad on reduced set B
+    np_max_sub = np_max; %2 * sub_dim + 1;
+    [np, Gres, Hres, valid] = yet_another_formquad(B, F(Mind, :), delta, np_max_sub, Model.Par, sub_xk_in, 0);
+    if ~valid
+        error('Something went wrong.'); 
+    end
+
+    Cres = F(xk_in, :);
+     [G, H] = combinemodels(Cres, Gres, Hres);
+     ng = norm(G);
+     % once we re-enable bound constraints: 
+%     if np == n
+%         ind_Lnotbinding = and(X(xkin, :) > L, G' > 0);
+%         ind_Unotbinding = and(X(xkin, :) < U, G' < 0);
+%         ng = norm(G .* (ind_Lnotbinding + ind_Unotbinding)');
+%     else
+%         ind_Lnotbinding = and(X(xkin, :) > L, G'*S' > 0);
+%         ind_Unotbinding = and(X(xkin, :) < U, G'*S' < 0);
+%         ng = norm((S*G) .* (ind_Lnotbinding + ind_Unotbinding)');
+%     end
+
+    %% Step 1.b - update the bandit estimator
+    % update the dictionary
+    current_length = length(sketch_dictionary);
+
+    % create a new dictionary entry
+    if ~isempty(G) %~isempty(sketched_grad)
+        %dictionary_entry.S = new_sketch';
+        %dictionary_entry.sketched_grad = sketched_grad; 
+        %dictionary_entry.sketch_size = length(sketched_grad); 
+        dictionary_entry.S = S;
+        dictionary_entry.sketched_grad = G;
+        dictionary_entry.sketch_size = sub_dim;
+        sketch_dictionary{current_length + 1} = dictionary_entry;
+        current_length = current_length + 1;
+    end
+   
+    % how much memory to maintain?
+    total_memory_used = 0;
+    for idx = current_length:-1:1
+        total_memory_used = total_memory_used + sketch_dictionary{idx}.sketch_size;
+        if total_memory_used > memory
+            break
+        end
+    end
+
+    for j = 1:(idx-1)        
+        % delete oldest entry
+        sketch_dictionary(1) = [];
+    end
+    
+    current_length = length(sketch_dictionary);
+    for j = 1:current_length
+        % compute the gradient estimator
+        rhs = rhs + sketch_dictionary{j}.S * sketch_dictionary{j}.sketched_grad;
+    end
+
+    % compute new bandit estimate
+    %mean_bandit = inverse_covariance_bandit * rhs;
+    mean_bandit = smw_product(sketch_dictionary, regularizer, rhs);
+
+    % update the upper bound, too
+    ub = (1 - ub_lr) * ub + ub_lr * (n / sub_dim) * norm(S * G);
+
+    % 2. Criticality test invoked if the projected model gradient is small
+    if ng < g_tol
+        % Need to decide how we're going to implement this. 
+        % Do we sample all dimensions in a small ball? Do we do this
+        % progressively? It's unclear. For now, let's just stop while we're
+        % debugging a new method: 
+        if ng < g_tol % We trust the small gradient norm and return
+            %[X, F, flag] = prepare_outputs_before_return(X, F, nf, 0);
+            %return
+        end
+    end
+
+    % 3. Solve the subproblem min{G'*s+.5*s'*H*s : Lows <= s <= Upps }
+    % Need to figure out how to handle box constraints later. 
+    Lows = -delta * ones(1, sub_dim);
+    Upps = -Lows;
+    if spsolver == 1 % Stefan's crappy 10line solver
+        [Xsp, mdec] = bqmin(H, G, Lows, Upps);
+    elseif spsolver == 2 % Arnold Neumaier's minq5 
+        % only one I care to test right now. 
+        [Xsp, mdec, minq_err] = minqsw(0, G, H, Lows', Upps', 0, zeros(sub_dim, 1));
+        if minq_err < 0
+            [X, F, flag] = prepare_outputs_before_return(X, F, nf, -4);
+            return
+        end
+
+    elseif spsolver == 3 % Arnold Neumaier's minq8
+
+        data.gam = 0;
+        data.c = G;
+        data.b = zeros(np, 1);
+        [tmp1, tmp2] = ldl(H);
+        data.D = diag(tmp2);
+        data.A = tmp1';
+
+        [Xsp, mdec] = minq8(data, Lows', Upps', zeros(sub_dim, 1), 10 * sub_dim);
+    end
+
+    % Put solution back in correct coordinates:
+    Xsp = S * Xsp;
+
+    step_norm = norm(Xsp, inf);
+
+    % 4. Evaluate the function at the new point (provided mdec isn't zero with an invalid model)
+    if (step_norm >= 0.01 * delta) && ~(mdec == 0)
+
+        Xsp = min(Upp, max(Low, X(xk_in, :) + Xsp'));
+
+        % Project if we're within machine precision
+        % Need to revisit this step when we work on bound constrints. 
+
+        if mdec == 0 && all(Xsp == X(xk_in, :))
+            [X, F, flag] = prepare_outputs_before_return(X, F, nf, -2);
+            return
+        end
+
+        nf = nf + 1;
+        X(nf, :) = Xsp;
+        F(nf, :) = Ffun(X(nf, :));
+        if any(isnan(F(nf, :)))
+            [X, F, flag] = prepare_outputs_before_return(X, F, nf, -3);
+            return
+        end
+        hF(nf) = hfun(F(nf, :));
+
+        if mdec ~= 0
+            rho = (hF(nf) - hF(xk_in)) / mdec;
+        else % Note: this conditional only occurs when model is valid
+            if hF(nf) == hF(xk_in)
+                [X, F, flag] = prepare_outputs_before_return(X, F, nf, -2);
+                return
+            else
+                rho = inf * sign(hF(nf) - hF(xk_in));
+            end
+        end
+
+        % 4a. Update the center
+        if rho > 0
+            %  Update model to reflect new center
+            xk_in = nf; % Change current center
+        end
+
+        fprintf(progstr, nf, delta, hF(xk_in), sub_dim, ng);
+
+        % 4b. Update the trust-region radius:
+        if (rho >= eta_1)
+            if ng >= g_tol
+                if (step_norm > .75 * delta)
+                    delta = min(delta * gamma_inc, delta_max);
+                end
+            else
+                delta = max(delta * gamma_dec, delta_min);
+            end
+        else
+            delta = max(delta * gamma_dec, delta_min);
+        end
+    else % Don't evaluate f at Xsp
+        %if printf
+        %    disp('Warning: skipping sp soln!---------');
+        %end
+	delta = max(delta_min, gamma_dec * delta);
+    end
+end % end main while
+
+
+if printf
+    disp('Number of function evals exceeded');
+end
+flag = ng;
+end

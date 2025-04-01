@@ -14,7 +14,7 @@ elseif strcmp(test_type,'progressive')
     alpha = 1:n;
 end
 
-%Lip = [20*ones(1, n/2 - 1), 20*n, zeros(1, n/2)];
+Lip = [20*ones(1, n/2 - 1), 20*n, zeros(1, n/2)];
 
 rng(macro_seed);
 

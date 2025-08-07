@@ -1,0 +1,7 @@
+[project]
+name = "pystars"
+version = "0.1.0"
+description = "Stochastic Trust-Region Derivative Free Optimization"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []

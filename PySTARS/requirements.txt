@@ -1,0 +1,10 @@
+setuptools
+pandas
+matplotlib
+scipy
+joblib
+qiskit==0.46.1
+networkx
+qiskit-aer==0.13.2
+
+-e .

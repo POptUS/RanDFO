@@ -1,0 +1,13 @@
+title: PySTARS
+description: Python STARS / ANASTAARS optimization algorithms
+remote_theme: just-the-docs/just-the-docs
+footer_content: "© Copyright 2025, Krishna Rauniyar.<br>Built using Just the Docs, a documentation theme for Jekyll."
+markdown: kramdown
+kramdown:
+  input: GFM
+  math_engine: mathjax
+
+aux_links:
+  GitHub Repo: https://github.com/KrishnaRauniyar/RanDFO
+nav_external_links_new_tab: true
+

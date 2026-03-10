@@ -2,16 +2,15 @@ function [probs, to_update, V] = choose_subset(models, batch_size, x, delta, alr
 
     m = length(models);
     error_estimates = zeros(1, m); 
-
     for j = 1:m
         if nargin == 5
             error_estimates(j) = get_error_estimate(models(j), x, delta);
         else
             error_estimates(j) = get_error_estimate(models(j), x);
-        end       
+        end
     end
 
-    % experiment: censor by validity and center point
+    % censor pointless-to-update models
     if nargin == 5
         error_estimates(already_updated) = 0;
     end
@@ -46,4 +45,5 @@ function [probs, to_update, V] = choose_subset(models, batch_size, x, delta, alr
         end
     end
     to_update = to_update(:);
+
 end

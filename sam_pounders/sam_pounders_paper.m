@@ -1,13 +1,13 @@
-function [X_inc, models] = sam_pounders(Ffun, X_0, n, nf_max, g_tol, delta_0, m, Low, Upp, batch_size, Prior, Options, Model)
+function [X_inc_array, nf_array, models] = sam_pounders_paper(Ffun, X_0, n, nf_max, g_tol, delta_0, m, Low, Upp, batch_size, expert_array, Prior, Options, Model)
 
 % Check for missing arguments and initialize if necessary
-if nargin < 13 || isempty(Model)
+if nargin < 14 || isempty(Model)
     Model = struct();
 end
-if nargin < 12 || isempty(Options)
+if nargin < 13 || isempty(Options)
     Options = struct();
 end
-if nargin < 11 || isempty(Prior)
+if nargin < 12 || isempty(Prior)
     Prior = struct();
     Prior.nfs = 0;
     Prior.X_init = [];
@@ -52,8 +52,8 @@ if isfield(Options, 'hfun')
     combinemodels = Options.combinemodels;
 else
     % Use least-squares hfun by default
-    [here_path, ~, ~] = fileparts(mfilename('fullpath'));
-    addpath(fullfile(here_path, 'general_h_funs'));
+    %[here_path, ~, ~] = fileparts(mfilename('fullpath'));
+    %addpath(fullfile(here_path, 'general_h_funs'));
     hfun = @(F)sum(F.^2);
     combinemodels = @leastsquares;
 end
@@ -76,12 +76,8 @@ if ~isfield(Model, 'Par')
     Model.Par(4) = .001;  % [dbl] Pivot threshold for additional points (.001)
     Model.Par(5) = false; % [bool] reverse order is false. 
 end
-if ~isfield(Model, 'deterministic_numerator')
-    Model.deterministic_numerator = 1;
-end
-if ~isfield(Model, 'kappa')
-    Model.kappa = 100 * Model.Par(1);
-end
+
+init_batch_size = batch_size; 
 
 nfs = Prior.nfs;
 
@@ -117,8 +113,13 @@ if flag == -1 % Problem with the input
 end
 
 if nfs == 0 % Need to do the first evaluation
-    nf = 1;
+    nf = 0;
+    % Note that we're doing this evaluation FOR DISPLAY PURPOSES. 
+    % We are not actually using this evaluation, which is why it does not
+    % increment an nf counter. 
+    % This should be fixed/removed later. 
     F0 = Ffun(X_0, 1:m);
+    F_inc = F0; % for monotonic counter
     if length(F0) ~= m
         disp('  Error: F0 does not contain the right number of residuals');
         flag = -1;
@@ -154,23 +155,35 @@ else % Have other function values around
         nf = nf + models(j).nf;        
     end
     X_inc = X_0(xk_in); % explicitly store the current incumbent
+
 end
+X_inc_array = [X_0; repmat(X_0, n, 1) + delta * eye(n)];
+nf_array = linspace(m, (n+1) * m, n + 1);
+success_count = n + 1;
 
 % since we just computed all the models, we effectively just did this in 
 % the last step of the main loop:
-to_update = 1:m; 
+to_update = (1:m)'; 
 % this thing gets reset after every TR radius update: 
 already_updated = to_update; 
+combined_probs = ones(1, m);
 [Cres, Gres, Hres] = build_average_model(models, X_inc);
 
-% set some parameters for Exp4
-num_experts = 2;
-Exp4gamma = sqrt((batch_size * log(num_experts)) / m);
-Exp4eta = min(0.5,sqrt((batch_size * log(num_experts)) / m));
-weights = [0.5, 0.5];
+% parameters for Exp4
+num_experts = length(expert_array);
+if num_experts > 1
+    K = nf_max / batch_size; % this is a guess of the maximum number of Exp4 rounds that can be played within budget. 
+    fudge_factor = 10; 
+    Exp4gamma = fudge_factor * sqrt((m * log(num_experts)) / (batch_size * K));
+else
+    Exp4gamma = 1.0;
+end
 
-% set a parameter for estimating the dynamic reward scaling
-% (note, this is specific to lipschiz constant estimation)
+% equal initial weights on experts by default (can/should be exposed) 
+weights_model = ones(num_experts, 1) / num_experts; 
+weights_rho = ones(num_experts, 1) / num_experts;
+
+% set a parameter for estimating dynamic reward scaling
 EMAweight = 0.8;
 EMAc = 3.0; 
 
@@ -178,6 +191,7 @@ EMAc = 3.0;
 iter = 1; % this counter is for being able to reconstruct, from the models 
 % class object, the history of when each component function was evaluated,
 % and why. 
+
 while nf < nf_max
 
     %% Combine models
@@ -198,7 +212,13 @@ while nf < nf_max
             nf = nf + 1;
             [models(j), new_evals] = update_model(models(j), delta, nf_max, nf);
             nf = nf + new_evals;
+            if nf >= nf_max
+                break
+            end
             models(j).critical_iters(iter) = new_evals;
+        end
+        if nf >= nf_max
+            break
         end
         valid_models = validity_checker(models);
         % update any invalid models
@@ -217,6 +237,9 @@ while nf < nf_max
                     break
                 end
             end
+            if nf >= nf_max
+                break
+            end
             % now update the model
             models(j) = update_center_point(models(j), X_inc);
             [models(j), new_evals] = update_model(models(j), delta, nf_max, nf);
@@ -224,6 +247,9 @@ while nf < nf_max
             if nf >= nf_max
                 break
             end
+        end
+        if nf >= nf_max
+            break
         end
 
         % recalculate model gradient based on updated models
@@ -282,32 +308,8 @@ while nf < nf_max
             error('No model decrease with a totally valid model!')
         end
 
-        %% Choose a subset on which to evaluate trial Xsp
-%         if Model.deterministic_numerator
-%             this_batch_size = m;
-%             [expert_probs, ~, ~] = expert_policy(models, 'rho', Xsp, delta, X_inc, this_batch_size, already_updated);
-%         else
-%             this_batch_size = 0;
-%             var = Inf;
-%             while var == Inf % Model.kappa * min(1.0, delta)^4
-%                 this_batch_size = min(m, this_batch_size + batch_size);
-%                 [expert_probs, ~, var] = expert_policy(models, 'rho', Xsp, delta, X_inc, this_batch_size, already_updated);
-%             end
-%         end
-%         uniform_probs = uniform_policy(models, 'rho', this_batch_size, already_updated);
-%         combined_probs = weights(1) * expert_probs + weights(2) * uniform_probs; 
-%         [cps_probs, to_update] = poisson_sample_shortcut(combined_probs, this_batch_size);       
-% 
-%         probs = cps_probs';
-%         probs = (1.0 - (Exp4gamma / sqrt(iter))) * (probs / batch_size) + (Exp4gamma / sqrt(iter)) * ones(m, 1) / m; 
-        % MAKE THE NUMERATOR ALWAYS DETERMINISTIC
-        to_update = (1:m)'; 
-        probs = ones(1, m);
-        expert_probs = probs;
-        uniform_probs = uniform_policy(models, 'rho', m, already_updated);
-
-        %% Evaluate at the chosen batch
-        % first of all, what did the model predict?
+        %% Evaluate Xsp
+        % what does the model predict before doing any updates?
         model_prediction_inc = zeros(1, m);
         model_prediction_sp = zeros(1, m);
         for j = 1:m
@@ -315,73 +317,129 @@ while nf < nf_max
             model_prediction_sp(j) = models(j).model_value_at_point(Xsp);
         end
 
+        % Generate a new sample
+        additional_context = struct();
+        additional_context.X_inc = X_inc;
+        additional_context.Xsp = Xsp;
+        additional_context.hfun = combinemodels;
+    
+        probs = zeros(m, num_experts); 
+        for j = 1:num_experts
+            probs(:, j) = expert_array{j}(models, batch_size, 'rho', additional_context);
+        end
+    
+        combined_probs = probs * weights_rho; 
+        [cps_probs, to_update] = poisson_sample_shortcut(combined_probs, batch_size);
+        
+        combined_probs = cps_probs';
+    
+        combined_probs = (1.0 - Exp4gamma) * (combined_probs / batch_size) + Exp4gamma * ones(m, 1) / m; 
+    
+        if any(isnan(combined_probs))
+            error('nan prob')
+        end
+
         % Now do the evals.
-        [models, FX_inc, FXsp, new_evals] = evaluate_ameliorated_model(models, probs, to_update, X_inc, Xsp, model_prediction_inc, model_prediction_sp, iter, delta, nf, nf_max);
+        valid_models = validity_checker(models); % do this first before we tentatively update model centers.
+
+        % AMELIORATED:
+        %[models, FX_inc, FXsp, new_evals] = evaluate_ameliorated_model(models, combined_probs, to_update, X_inc, Xsp, model_prediction_inc, model_prediction_sp, iter, delta, nf, nf_max);
+        % AVERAGE:
+        %[models, FX_inc, FXsp, new_evals] = evaluate_average_model(models, to_update, X_inc, Xsp, delta, nf_max, nf, iter);
+        [models, FX_inc, FXsp, average_FX_inc, average_FXsp, new_evals] = evaluate_two_points(models, X_inc, Xsp, delta, to_update, combined_probs);
+
         nf = nf + new_evals;
 
-        %% update the weights 
-        % DON'T DO THIS IF DETERMINISTIC F EVALS
-%         % How bad were your model predictions?
-%         prediction_errors = zeros(1, m);
-%         for j = to_update'
-%             prediction_errors(j) = abs(model_prediction_inc(j) - FX_inc(j));
-%             prediction_errors(j) = max(prediction_errors(j), abs(model_prediction_sp(j) - FXsp(j)));
-%             % normalize by importance sampling weight
-%             prediction_errors(j) = min(1.0, prediction_errors(j)) / probs(j);
-%         end
-% 
-%         % Update the scale.
-%         maxe = max(eps, max(prediction_errors));
-%         if iter == 1
-%             reward_scale = maxe;
-%         else
-%             reward_scale = EMAweight * reward_scale + (1.0 - EMAweight) * maxe; 
-%         end
-% 
-%         % Update both weights. 
-%         for j = to_update'
-%             weights(1) = weights(1) * exp(Exp4eta * expert_probs(j) * prediction_errors(j) / (EMAc * reward_scale));
-%             weights(2) = weights(2) * exp(Exp4eta * uniform_probs(j) * prediction_errors(j) / (EMAc * reward_scale));
-%         end
-%         % And normalize the weights.
-%         weights = weights / sum(weights); 
+        %% update the weights
+        % How bad were your model predictions?
+        for j = to_update'
+            reward = abs(model_prediction_inc(j) - FX_inc(j));
+            reward = max(reward, abs(model_prediction_sp(j) - FXsp(j)));
+            % Update the scale.
+            maxe = max(eps, reward);
+            if iter == 1
+                reward_scale_rho = maxe;
+            else
+                reward_scale_rho = EMAweight * reward_scale_rho + (1.0 - EMAweight) * maxe; 
+            end
+            % now update weights with reward:
+            scaled_reward = reward / combined_probs(j);
+            for ne = 1:num_experts
+                weights_rho(ne) = weights_rho(ne) * exp(Exp4gamma * probs(j, ne) * scaled_reward / (m * (EMAc * reward_scale_rho)));
+            end
+        end
+        % And normalize the weights.
+        weights_rho = weights_rho / sum(weights_rho); 
 
         %% compute numerator of success ratio rho
-        numerator = hfun(FXsp) - hfun(FX_inc);
+        %numerator = hfun(FXsp) - hfun(FX_inc);
+        numerator = hfun(average_FXsp) - hfun(average_FX_inc);
         rho = numerator / mdec; 
     
         %% update TR center
-        valid_models = validity_checker(models);
+        
         if (rho >= eta_1 || ((rho > 0) && all(valid_models)))
+            avg_hF_Xsp = hfun(average_FXsp);
             if printf
                 % NOTICE THAT THIS IS GIVING THE DETERMINISTIC VALUE FOR
                 % THE SAKE OF EXPERIMENTATION. THE VARIABLE fval SHOULD BE
                 % CHANGED TO hfun(FXsp) FOR DEPLOYMENT. 
-                fval = hfun(Ffun(X_inc, 1:m));
-                fprintf('%4i  %4i  Successful iteration  %11.5e    %11.5e   %11.5e \n', nf, iter, fval, delta, ng);
+                %fval = hfun(Ffun(Xsp, 1:m));
+                fprintf('%4i  %4i  Successful iteration  %11.5e    %11.5e   %11.5e \n', nf, iter, avg_hF_Xsp, delta, ng);
             end
             X_inc = Xsp;
-            for j = to_update'
-                % because we only tentatively updated the centers:
-                [models(j), new_evals] = update_model(models(j), delta, nf_max, nf);
-                nf = nf + new_evals;
+
+            % check for monotonicity in h values - if violated, increase batch size: 
+            % if avg_hF_Xsp > F_inc
+            %     batch_size = min(batch_size + init_batch_size, m);
+            % end
+            F_inc = avg_hF_Xsp;
+
+            % output stuff:
+            success_count = success_count + 1;
+            X_inc_array(success_count, :) = X_inc;
+            nf_array(success_count) = nf; 
+            % because we tentatively updated the centers, check if we can
+            % update the model center "for free" 
+            for j = to_update' %1:m
+                [acceptable, ~] = probe_interpolation(models(j), delta);
+                if acceptable
+                    [models(j), new_evals] = update_model(models(j), delta, nf_max, nf);
+                    nf = nf + new_evals; % new_evals should actually be 0 here, but just in case!
+                else
+                    % snap the models in to_update back to their previous
+                    % center
+                    models(j) = make_untentative(models(j));
+                    [models(j), new_evals] = update_model(models(j), delta, nf_max, nf);
+                    nf = nf + new_evals; % new_evals should actually be 0 here, but just in case!
+                end
+                if nf >= nf_max
+                    break
+                end
             end
         else
             for j = to_update'
-                models(j) = make_untentative(models(j));
                 % snap the models in to_update back to their previous
                 % center
+                models(j) = make_untentative(models(j));
                 [models(j), new_evals] = update_model(models(j), delta, nf_max, nf);
                 nf = nf + new_evals; % new_evals should actually be 0 here, but just in case!
+                if nf >= nf_max
+                    break
+                end
             end
         end
+        if nf >= nf_max
+            break
+        end
     
-        %% update TR
+        already_updated = find(center_checker(models, X_inc));
+        %close_enough = find(close_to_center_checker(models, X_inc, delta));
+        %% update TR radius
         if (rho >= eta_1)  &&  (step_norm > delta_inact * delta)
             delta = min(delta * gamma_inc, delta_max);
-            already_updated = to_update;
         else
-            if (rho < eta_1 && all(valid_models) && length(already_updated) == m)
+            if rho < eta_1  && all(valid_models) && length(already_updated) == m
                 delta = max(delta * gamma_dec, delta_min);
                 % we no longer trust that any of the models are valid in a
                 % smaller ball: 
@@ -395,8 +453,7 @@ while nf < nf_max
     %% Model improvement step
     valid_models = validity_checker(models);
     if ~all(valid_models(already_updated)) && (nf < nf_max) && (rho < eta_1)
-        % for annoying batch_size = 1 case:
-        already_updated = already_updated(:);
+        already_updated = already_updated(:); % for annoying batch_size = 1 case
         for j = already_updated'
             [models(j), Mdir_j, ~, valid_j] = just_check_validity(models(j), delta);
             if ~valid_j
@@ -429,6 +486,9 @@ while nf < nf_max
                 models(j) = update_center_point(models(j), X_inc);
                 [models(j), new_evals] = update_model(models(j), delta, nf_max, nf);
                 nf = nf + new_evals; % new_evals should actually be 0 here, but just in case!
+                if nf >= nf_max
+                    break
+                end
                 models(j).improve_iters(iter) = min(batch_size,(n-np_j)) + new_evals;
             end
         end
@@ -436,32 +496,88 @@ while nf < nf_max
 
     %% Prepare next iteration's ameliorated model
 
-    this_batch_size = batch_size;
-    [expert_probs, ~] = expert_policy(models, 'model', X_inc, delta, X_inc, this_batch_size, already_updated);
-    uniform_probs = uniform_policy(models, 'model', this_batch_size, already_updated);
-    combined_probs = weights(1) * expert_probs + weights(2) * uniform_probs; 
-    [cps_probs, to_update] = poisson_sample_shortcut(combined_probs, this_batch_size);
-    probs = cps_probs';
-    probs = (1.0 - (Exp4gamma / sqrt(iter))) * (probs / batch_size) + (Exp4gamma / sqrt(iter)) * ones(m, 1) / m; 
-    if any(isnan(probs))
-        error('nan prob')
+    % Generate a new sample
+    additional_context = struct();
+    additional_context.X_inc = X_inc;
+    additional_context.delta = delta;
+    additional_context.already_updated = already_updated; 
+    additional_context.hfun = combinemodels; 
+
+    % First - is our batch size OK? 
+    % need a coarse variance estimate
+    %[~, var] = lipschitz_estimate_policy(models, batch_size, 'model', additional_context);
+    %if var > delta^4
+    %end
+
+    probs = zeros(m, num_experts); 
+    for j = 1:num_experts
+        probs(:, j) = expert_array{j}(models, batch_size, 'model', additional_context);
+    end
+
+    combined_probs = probs * weights_model; 
+    [cps_probs, to_update] = poisson_sample_shortcut(combined_probs, batch_size);
+    combined_probs = cps_probs';
+
+    combined_probs = (1.0 - Exp4gamma) * (combined_probs / batch_size) + Exp4gamma * ones(m, 1) / m; 
+
+    if any(isnan(combined_probs))
+        error('combined probs contains nan')
     end
 
      % Save copy of average model
      [Cres, Gres, Hres] = build_average_model(models, X_inc);
     
-     % update the subset of models
+     % update the subset of models and simultaneously compute reward 
      for j = to_update'
-         models(j) = update_center_point(models(j), X_inc);
+         pre_Cres = models(j).Cres;
+         pre_Gres = models(j).Gres;
+         pre_Hres = models(j).Hres;
+         center_point = models(j).center_point;
+         displaced = X_inc - center_point;
+         models(j) = update_center_point(models(j), X_inc);       
          [models(j), new_evals] = update_model(models(j), delta, nf_max, nf);
-         %[models(j), new_evals] = validate_model(models(j), delta, nf_max, nf);
          nf = nf + new_evals;
+         if nf >= nf_max
+            break
+         end
          models(j).update_iters(iter) = new_evals; 
+         post_Cres = models(j).Cres;
+         post_Gres = models(j).Gres;
+         post_Hres = models(j).Hres; 
+         % compute the largest change in the model in the current TR
+         % see build_average_model for reminder of why this is what it is. 
+         diff_model_Cres = post_Cres - pre_Cres - displaced * pre_Gres - 0.5 * displaced * pre_Hres * displaced';
+         diff_model_Gres = post_Gres - pre_Gres - pre_Hres * displaced';
+         diff_model_Hres = post_Hres - pre_Hres;
+         % compute max_{s\inB(0,\Delta_k)} |diff_model_Cres +
+         % diff_model_Gres'*s + 0.5*s'*diff_model_Hres*s|: 
+        reward = max_abs_diff(diff_model_Cres, diff_model_Gres, diff_model_Hres, delta, Low, Upp, X_inc, spsolver, n);
+        % NOTE: this reward also needs to be scaled (hopefully close to
+        % [0,1]) 
+        % Update the scale.
+        maxe = max(eps, reward);
+        if iter == 1
+            reward_scale = maxe;
+        else
+            reward_scale = EMAweight * reward_scale + (1.0 - EMAweight) * maxe; 
+        end
+        % now update weights with reward:
+        scaled_reward = reward / combined_probs(j); 
+        for ne = 1:num_experts
+            weights_model(ne) = weights_model(ne) * exp(Exp4gamma * probs(j, ne) * scaled_reward / (m * (EMAc * reward_scale)));
+        end
      end
+     if nf >= nf_max
+        break
+    end
+     weights_model = weights_model / sum(weights_model); % normalization
      already_updated = union(already_updated, to_update'); 
     
+     %% TEMPORARILY COMMENTING, SO WE USE AVERAGE MODEL HERE. 
      % build the ameliorated model
-     [Cres, Gres, Hres] = build_ameliorated_model(models, X_inc, to_update, probs, Cres, Gres, Hres);
+     % Notice we are assuming Cres, Gres, Hres are populated with the
+     % average model data. 
+     %[Cres, Gres, Hres] = build_ameliorated_model(models, X_inc, to_update, combined_probs, Cres, Gres, Hres);
 
     iter = iter + 1; % update the iteration counter
 end % end while

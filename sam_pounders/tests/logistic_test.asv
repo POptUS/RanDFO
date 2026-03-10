@@ -19,11 +19,11 @@ addpath('../'); % don't change this one, this is just getting sam_pounders on th
 test_type = 'progressive';
 
 %% Choose the problem dimension (n) and number of data points (m)
-m = 198;
+m = ;
 n = 14;
 
 %% For SAM-POUNDERS:
-batch_size = 1;
+batch_size = m;
 
 macro_seed = 888;
 

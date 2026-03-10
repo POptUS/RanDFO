@@ -1,0 +1,5 @@
+function [G, H] = sum_combine(Cres, Gres, Hres)
+
+    G = sum(Gres, 2);
+    H = sum(Hres, 3);
+end

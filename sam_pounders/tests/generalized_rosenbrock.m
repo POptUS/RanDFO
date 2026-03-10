@@ -12,21 +12,18 @@ end
 
 x=x(:); % Turn into column vector
 
-n = length(x); m = n;
+n = length(x); m = 2 * (n - 1);
 
-if mod(n,2) ~= 0
-    error('n must be even');
-end
-
-F = zeros(1,m); J = zeros(m);
+F = zeros(1, m); J = zeros(m);
 for j = 1:(m/2)
-   F(j) = 10*alpha(j)*(x(2*j-1)^2 - x(2*j));
-   F((m/2)+j) = alpha((m/2)+j)*(x(2*j-1)-1);
-   J(j,2*j-1) = 20*alpha(j)*x(2*j-1);
-   J(j,2*j) = -10*alpha(j);
-   J((m/2)+j,2*j-1) = alpha((m/2)+j);
+   F(j) = 10*alpha(j)*(x(j+1)^2 - x(j));
+   J(j,j+1) = 20*alpha(j)*x(j+1);
+   J(j,j) = -10*alpha(j);
 end
-
+for j = (m/2 + 1):m
+    F(j) = alpha(j) * (1-x(j - (m/2)));
+    J(j,j) = -alpha(j);
+end
 
 % if using sos code:
 F = F(Set); J = J(Set,:)';

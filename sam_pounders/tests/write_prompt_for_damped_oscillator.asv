@@ -1,0 +1,35 @@
+function prompt = write_prompt_for_damped_oscillator(X_inc, models, t0, t1)
+
+X_inc_struct.amplitude = X_inc(1);
+X_inc_struct.mass = X_inc(2);
+X_inc_struct.spring_constant = X_inc(3);
+X_inc_struct.damping_coefficient = X_inc(4);
+X_inc_struct.phase = X_inc(5); 
+
+m = length(models);
+models_cell_array = cell(1, m);
+for j = 1:m
+    center_point = models(j).center_point; 
+    model_struct = struct();
+    model_struct.time_point = j;
+    model_struct.amplitude = center_point(1);
+    model_struct.mass = center_point(2);
+    model_struct.spring_constant = center_point(3);
+    model_struct.damping_coefficient = center_point(4);
+    model_struct.phase = center_point(5);
+    model_struct.residual = models(j).F(models(j).center_idx);
+    models_cell_array{j} = model_struct;
+end
+
+
+prompt = "I am using nonlinear least squares to fit five parameters (amplitude, mass, spring constant, damping coefficient, and phase) of a damped harmonic oscillator to experimental data obtained by measuring the displacement at 100 equally spaced time points from time "...
+    + "t=" + num2str(t0) + " seconds to t=1 seconds." ...
+    + "Pretend that evaluating the forward model is a very expensive operation and so I will only evaluate the forward model with my incumbent parameter estimate values at a random sample of the 100 time points." ...
+    + "The incumbent parameter estimate values, and the physical quantities they represent, are displayed in this json: " ...
+    + jsonencode(X_inc_struct) ...
+    + "At the end of this prompt, I will provide a second json that shows, for each time point indexed 1 through 100, a recently evaluated set of parameter estimate values, generally not equal to the incumbent parameter estimate values, and its corresponding scalar residual for the data fit." ... 
+    + "Given this setup, give me a vector of length 100 of nonnegative real-valued numbers that sum to 1; each entry of the vector should correspond to a probability with which I should evaluate the forward model using the incumbent parameter estimate values at the corresponding time point." ...
+    + "The json with all the data is: " ...
+    + jsonencode(models_cell_array); 
+
+end

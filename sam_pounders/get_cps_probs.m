@@ -27,8 +27,8 @@ while residual_old > p*sqrt(eps) && iter < maxiters
         alpha = 0.5*alpha;
     end
     pi_tilde = pi_tilde_new;
-
     psi = psi_trial;
+
     residual_old = norm(pi-psi);
     iter = iter + 1;
 end
@@ -37,7 +37,7 @@ end
 % is pi_tilde a proper distribution? 
 if any(pi_tilde <= 0) || any(pi_tilde >= 1) || any(isnan(pi_tilde)) || any(~isreal(pi_tilde))
     % unfortunate! 
-    warning('There was an error in updating pi to pi_tilde.')
+    %warning('There was an error in updating pi to pi_tilde.')
     pi_tilde = pi;
 end
 
@@ -67,7 +67,7 @@ end
 %% OUTPUT CHECKING
 % is pi_tilde a proper distribution? 
 if any(pi_tilde < 0) || any(pi_tilde > 1) || any(isnan(pi_tilde)) || any(~isreal(pi_tilde))
-    warning('There was an error in updating pi to pi_tilde.')
+    %warning('There was an error in updating pi to pi_tilde.')
     pi_tilde = pi;
 end
 end % end main function

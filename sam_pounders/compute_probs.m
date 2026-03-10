@@ -1,8 +1,8 @@
-function [pi, V] = compute_probs(s,delta)
+function [pi, V] = compute_probs(s, delta)
 
 p = length(delta);
 
-delta = max(delta,eps);
+delta = max(delta, eps);
 
 [sorted_delta, sort_inds] = sort(abs(delta)); 
 cum_sorted_delta = cumsum(sorted_delta);

@@ -89,14 +89,25 @@ eta_1 = Options.eta_1;
 printf = Options.printf;
 delta_inact = Options.delta_inact;
 
-if spsolver == 2 % Arnold Neumaier's minq5
-    [here_path, ~, ~] = fileparts(mfilename('fullpath'));
-    minq_path = fullfile(here_path, '..', '..', 'minq');
-    addpath(fullfile(minq_path, 'm', 'minq5'));
-elseif spsolver == 3 % Arnold Neumaier's minq8
-    [here_path, ~, ~] = fileparts(mfilename('fullpath'));
-    minq_path = fullfile(here_path, '..', '..', 'minq');
-    addpath(fullfile(minq_path, 'm', 'minq8'));
+% TODO: Figure out what to do here.  This is likely from pounders.m for which
+% the relative location of MINQ is known since MINQ is a submodule of the
+% IBCDFO repo.
+%if spsolver == 2 % Arnold Neumaier's minq5
+%    [here_path, ~, ~] = fileparts(mfilename('fullpath'));
+%    minq_path = fullfile(here_path, '..', '..', 'minq');
+%    addpath(fullfile(minq_path, 'm', 'minq5'));
+%elseif spsolver == 3 % Arnold Neumaier's minq8
+%    [here_path, ~, ~] = fileparts(mfilename('fullpath'));
+%    minq_path = fullfile(here_path, '..', '..', 'minq');
+%    addpath(fullfile(minq_path, 'm', 'minq8'));
+%end
+% This is just a potentially ugly hack to aid current development/testing.
+if spsolver == 2
+    if isempty(which('minqsw'))
+        error("Please add the minq/m/minq5 folder to the path");
+    end
+else
+    error("Only works with MINQ5 for now");
 end
 
 % 0. Check inputs

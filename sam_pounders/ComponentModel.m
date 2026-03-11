@@ -41,7 +41,8 @@ classdef ComponentModel
             obj.id_tag = id_tag;
             obj.fun = fun; 
             obj.X = X_init;
-            obj.F(1) = F_init;
+            %obj.F(1) = F_init;
+            obj.F = F_init; 
             obj.center_idx = xk_in;
             obj.center_point = obj.X; % this currently assumes a trivial Prior
             [obj.nf, obj.n] = size(X_init);
@@ -53,8 +54,10 @@ classdef ComponentModel
             obj.Low = Low;
             obj.Upp = Upp;
             obj.batch_size = batch_size;
-            % call a function to build model on data:
-            obj = evaluate_initial_points(obj, delta_init);
+            if size(X_init, 1) < obj.n + 1
+                % call a function to build model on data:
+                obj = evaluate_initial_points(obj, delta_init);
+            end
             obj = update_model(obj, delta_init, nf_max, outer_nf);
         end
 

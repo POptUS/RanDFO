@@ -20,15 +20,15 @@ test_type = 'progressive';
 
 macro_seed = 88;
 
-%problem = 'rosenbrock'; 
+problem = 'rosenbrock'; 
 %problem = 'cube';
 %problem = 'basic_cubic';
-problem = 'damped_oscillator';
+%problem = 'damped_oscillator';
 
 if strcmp(problem, 'damped_oscillator')
     % specify time
     n = 4;
-    m = 200;
+    m = 8;
     t = linspace(0, 1, m);
 else
     n = 8;
@@ -58,7 +58,7 @@ else
     experimental_values = damped_oscillator(truth, 1:m, t);
 end
 
-figure; plot(t, experimental_values);
+%figure; plot(t, experimental_values);
 
 rng(macro_seed);
 
@@ -109,7 +109,18 @@ elseif strcmp(problem, 'damped_oscillator')
     Options.delta_max = 0.1;
 end
 
-pounders(fun, X0, n, nf_max, g_tol, delta_0, m, Low, Upp, [], Options);
+% define Prior data
+X_init = [X0; repmat(X0, n, 1) + delta_0 * eye(n)];
+F_init = zeros(n+1, m);
+for i = 1:(n+1)
+    F_init(i, :) = fun(X_init(i, :));
+end
+nfs = n + 1;
+
+Prior.X_init = X_init; Prior.F_init = F_init; Prior.nfs = n + 1; Prior.xk_in = 1;
+%Prior = [];
+
+pounders(fun, X_init, n, nf_max, g_tol, delta_0, m, Low, Upp, Prior, Options);
 pause()
 
 if strcmp(problem,'rosenbrock')
@@ -135,7 +146,7 @@ expert_array = {@lipschitz_estimate_policy, @uniform_policy};
 %expert_array = {@(models, batch_size, sample_type, data)surrogate_informed_policy(models, batch_size, sample_type, data, surrogate_array, Low, Upp, spsolver), @uniform_policy};
 %expert_array = {@(models, batch_size, sample_type, data)surrogate_informed_policy(models, batch_size, sample_type, data, surrogate_array, Low, Upp, spsolver), @lipschitz_estimate_policy, @uniform_policy};
 
-[X_inc, effort, models] = sam_pounders_paper(fun, X0, n, nf_max, g_tol, delta_0, m, Low, Upp, batch_size, expert_array, [], Options, []);
+[X_inc, effort, models] = sam_pounders_paper(fun, X_init, n, nf_max, g_tol, delta_0, m, Low, Upp, batch_size, expert_array, Prior, Options, []);
 
 num_iters = length(models(1).critical_iters);
 nfcount = zeros(m, num_iters);

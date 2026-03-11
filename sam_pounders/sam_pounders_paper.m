@@ -77,8 +77,6 @@ if ~isfield(Model, 'Par')
     Model.Par(5) = false; % [bool] reverse order is false. 
 end
 
-init_batch_size = batch_size; 
-
 nfs = Prior.nfs;
 
 delta = delta_0;
@@ -102,7 +100,7 @@ elseif spsolver == 3 % Arnold Neumaier's minq8
 end
 
 % 0. Check inputs
-[flag, X_0, np_max, xk_in, Low, Upp] = ...
+[flag, X_0, np_max, ~, Low, Upp] = ...
     checkinputss(Ffun, X_0, n, Model.np_max, nf_max, g_tol, delta, nfs, m, Prior.F_init, Prior.xk_in, Low, Upp);
 xk_in = 1;
 if flag == -1 % Problem with the input
@@ -112,14 +110,13 @@ if flag == -1 % Problem with the input
     return
 end
 
+nf = 0; % count component function evals performed by method. 
 if nfs == 0 % Need to do the first evaluation
-    nf = 0;
     % Note that we're doing this evaluation FOR DISPLAY PURPOSES. 
     % We are not actually using this evaluation, which is why it does not
     % increment an nf counter. 
     % This should be fixed/removed later. 
     F0 = Ffun(X_0, 1:m);
-    F_inc = F0; % for monotonic counter
     if length(F0) ~= m
         disp('  Error: F0 does not contain the right number of residuals');
         flag = -1;
@@ -141,23 +138,21 @@ if nfs == 0 % Need to do the first evaluation
         nf = nf + models(j).nf;        
     end
     X_inc = X_0; % explicitly store the current incumbent
+    X_inc_array = [X_0; repmat(X_0, n, 1) + delta * eye(n)];
 else % Have other function values around
-    nf = nfs;
-    nf_max = nf_max + nfs;
     % populate ComponentModels
     for id_tag = 1:m
         fun = @(x)Ffun(x, id_tag);
         % Notice that this assumes all components of F were evaluated at
         % every point in X_0. Future engineering will have to worry about
         % what to do with / whether to accept partial Fvecs at points X_0. 
-        models(j) = ComponentModel(id_tag, fun, X_0(1:nfs, :), F0(1:nfs, j), xk_in, np_max, Par, Low, Upp, delta_0, nf_max, 1);
+        models(id_tag) = ComponentModel(id_tag, fun, X_0(1:nfs, :), Prior.F_init(1:nfs, id_tag)', xk_in, np_max, Model.Par, Low, Upp, delta_0, nf_max, 1, batch_size);
         % update nf in this scope:
-        nf = nf + models(j).nf;        
+        %nf = nf + models(id_tag).nf;        
     end
     X_inc = X_0(xk_in); % explicitly store the current incumbent
-
+    X_inc_array = X_0;
 end
-X_inc_array = [X_0; repmat(X_0, n, 1) + delta * eye(n)];
 nf_array = linspace(m, (n+1) * m, n + 1);
 success_count = n + 1;
 

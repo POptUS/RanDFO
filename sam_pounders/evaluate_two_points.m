@@ -1,4 +1,4 @@
-function [models, FX_inc, FXsp, average_values_inc, average_values_sp, new_evals_ctr] = evaluate_two_points(models, X_inc, Xsp, delta, to_update, probs)
+function [models, FX_inc, FXsp, average_values_inc, average_values_sp, new_evals_ctr] = evaluate_two_points(models, X_inc, Xsp, delta, to_update, probs, iter)
 
     m = length(models);
 
@@ -41,6 +41,7 @@ function [models, FX_inc, FXsp, average_values_inc, average_values_sp, new_evals
         % evaluation at the trial
         models(j) = tentative_update_center_point(models(j), Xsp);
         FXsp(j) = models(j).F(models(j).center_idx);
+        models(j).trial_iters(iter) = 1;
         new_evals_ctr = new_evals_ctr + 1;
     end
 

@@ -89,25 +89,14 @@ eta_1 = Options.eta_1;
 printf = Options.printf;
 delta_inact = Options.delta_inact;
 
-% TODO: Figure out what to do here.  This is likely from pounders.m for which
-% the relative location of MINQ is known since MINQ is a submodule of the
-% IBCDFO repo.
-%if spsolver == 2 % Arnold Neumaier's minq5
-%    [here_path, ~, ~] = fileparts(mfilename('fullpath'));
-%    minq_path = fullfile(here_path, '..', '..', 'minq');
-%    addpath(fullfile(minq_path, 'm', 'minq5'));
-%elseif spsolver == 3 % Arnold Neumaier's minq8
-%    [here_path, ~, ~] = fileparts(mfilename('fullpath'));
-%    minq_path = fullfile(here_path, '..', '..', 'minq');
-%    addpath(fullfile(minq_path, 'm', 'minq8'));
-%end
-% This is just a potentially ugly hack to aid current development/testing.
-if spsolver == 2
-    if isempty(which('minqsw'))
-        error("Please add the minq/m/minq5 folder to the path");
-    end
-else
-    error("Only works with MINQ5 for now");
+if spsolver == 2 % Arnold Neumaier's minq5
+    [here_path, ~, ~] = fileparts(mfilename('fullpath'));
+    minq_path = fullfile(here_path, '..', '..', 'minq');
+    addpath(fullfile(minq_path, 'm', 'minq5'));
+elseif spsolver == 3 % Arnold Neumaier's minq8
+    [here_path, ~, ~] = fileparts(mfilename('fullpath'));
+    minq_path = fullfile(here_path, '..', '..', 'minq');
+    addpath(fullfile(minq_path, 'm', 'minq8'));
 end
 
 % 0. Check inputs
@@ -164,8 +153,10 @@ else % Have other function values around
     X_inc = X_0(xk_in); % explicitly store the current incumbent
     X_inc_array = X_0;
 end
-nf_array = linspace(m, (n+1) * m, n + 1);
+nf = (n + 1) * m;
+nf_array = linspace(m, nf, n + 1);
 success_count = n + 1;
+nf_max = nf + nf_max; 
 
 % since we just computed all the models, we effectively just did this in 
 % the last step of the main loop:
@@ -352,7 +343,7 @@ while nf < nf_max
         %[models, FX_inc, FXsp, new_evals] = evaluate_ameliorated_model(models, combined_probs, to_update, X_inc, Xsp, model_prediction_inc, model_prediction_sp, iter, delta, nf, nf_max);
         % AVERAGE:
         %[models, FX_inc, FXsp, new_evals] = evaluate_average_model(models, to_update, X_inc, Xsp, delta, nf_max, nf, iter);
-        [models, FX_inc, FXsp, average_FX_inc, average_FXsp, new_evals] = evaluate_two_points(models, X_inc, Xsp, delta, to_update, combined_probs);
+        [models, FX_inc, FXsp, average_FX_inc, average_FXsp, new_evals] = evaluate_two_points(models, X_inc, Xsp, delta, to_update, combined_probs, iter);
 
         nf = nf + new_evals;
 

@@ -34,107 +34,116 @@ hfun = @(F)sum(F.^2);
 
 num_solvers = 4;
 simplex_grads = 50;
-nf_max = simplex_grads * max(dfo(:, 2).*dfo(:, 3));
-H = NaN * ones(nf_max, num_probs, num_solvers); 
-effort = H; 
 
-for np = 1:num_probs
-
-    try
-    nprob = dfo(np, 1);
-    n = dfo(np, 2);
-    m = dfo(np, 3);
-    scale_factor = dfo(np, 4);
-
-    fun = @(x)bendfo_wrapper(m, n, nprob, x);
-    X0 = dfoxs(n, nprob, 10^scale_factor); 
-
-    % problem-dependent parameters (depend on n)
-
-    %Low = -Inf * ones(1, n);
-    %Upp = Inf * ones(1, n); 
-
-    % if using surrogate:
-    Low = L{np}; Upp = U{np}; 
-
-    npmax = 2*n + 1;
-    nf_max = simplex_grads*n;
-
-    macro_seed = 88;
-    rng(macro_seed);
-
-    %% SOLVER 1
-    solver_count = 1;
-    % run pounders
-    [~, ~, hF] = pounders(fun, X0, n, nf_max, g_tol, delta_0, m, Low, Upp, [], Options);
+for seed_count = 2:3
+    nf_max = simplex_grads * max(dfo(:, 2).*dfo(:, 3));
+    H = NaN * ones(nf_max, num_probs, num_solvers); 
+    effort = H; 
+    %savestr = strcat('lipschitz_test_',num2str(seed_count),'.mat');
+    savestr = strcat('surrogate_test_',num2str(seed_count),'.mat');
+    for np = 1:num_probs
     
-    % populate H and effort
-    H(1:length(hF), np, solver_count) = hF; 
-    effort(1:length(hF), np, solver_count) = linspace(m, m * length(hF), length(hF));
-
-    %% SOLVER 2 - UNIFORM ONLY
-    solver_count = solver_count + 1;
-    % sam-pounders specific:
-
-    macro_seed = 88;
-    rng(macro_seed);
-
-    fun = @(x, Set)bendfo_wrapper(m, n, nprob, x, Set);
-
-    nf_max = simplex_grads*m*n;
-    batch_size = floor(m/2);
+        try
+        nprob = dfo(np, 1);
+        n = dfo(np, 2);
+        m = dfo(np, 3);
+        scale_factor = dfo(np, 4);
     
-    expert_array = {@uniform_policy}; 
+        fun = @(x)bendfo_wrapper(m, n, nprob, x);
+        X0 = dfoxs(n, nprob, 10^scale_factor); 
     
-    [X_inc_array, nf_array, models] = sam_pounders_paper(fun, X0, n, nf_max, g_tol, delta_0, m, Low, Upp, batch_size, expert_array, [], Options, []);
-
-    % populate H and effort
-    nX = size(X_inc_array, 1);
-    for j = 1:nX
-        H(j, np, solver_count) = hfun(fun(X_inc_array(j, :), 1:m));
-    end
-    effort(1:nX, np, solver_count) = nf_array;
-
-     %% SOLVER 3 - LIPSCHITZ (SURROGATE) ONLY
-    solver_count = solver_count + 1;
-
-    macro_seed = 88;
-    rng(macro_seed);
+        % problem-dependent parameters (depend on n)
     
-    %expert_array = {@lipschitz_estimate_policy}; 
+        %Low = -Inf * ones(1, n);
+        %Upp = Inf * ones(1, n); 
     
-    surrogate_array = rbf_surrogates(@(x)bendfo_wrapper(m, n, nprob, x, 1:m), n, m, Low, Upp);
-    expert_array = {@(models, batch_size, sample_type, data)surrogate_informed_policy(models, batch_size, sample_type, data, surrogate_array, Low, Upp, spsolver)};
+        % if using surrogate:
+        Low = L{np}; Upp = U{np}; 
     
-    [X_inc_array, nf_array, models] = sam_pounders_paper(fun, X0, n, nf_max, g_tol, delta_0, m, Low, Upp, batch_size, expert_array, [], Options, []);
-
-    % populate H and effort
-    nX = size(X_inc_array, 1);
-    for j = 1:nX
-        H(j, np, solver_count) = hfun(fun(X_inc_array(j, :), 1:m));
-    end
-    effort(1:nX, np, solver_count) = nf_array;
-
-     %% SOLVER 4 - MIXED DISTRIBUTIONS
-    solver_count = solver_count + 1;
-
-    macro_seed = 88;
-    rng(macro_seed);
+        npmax = 2*n + 1;
+        nf_max = simplex_grads*n;
     
-    %expert_array = {@lipschitz_estimate_policy, @uniform_policy}; 
+        macro_seed = 88 + seed_count - 1;
+        rng(macro_seed);
     
-    expert_array = {@(models, batch_size, sample_type, data)surrogate_informed_policy(models, batch_size, sample_type, data, surrogate_array, Low, Upp, spsolver), @uniform_policy};
+        %% SOLVER 1
+        solver_count = 1;
+        if seed_count == 1
+            % there is no reason to run this deterministic method more than
+            % once. 
+            % run pounders
+            [~, ~, hF] = pounders(fun, X0, n, nf_max, g_tol, delta_0, m, Low, Upp, [], Options);
+        
+            % populate H and effort
+            H(1:length(hF), np, solver_count) = hF; 
+            effort(1:length(hF), np, solver_count) = linspace(m, m * length(hF), length(hF));
+        end
     
-    [X_inc_array, nf_array, models] = sam_pounders_paper(fun, X0, n, nf_max, g_tol, delta_0, m, Low, Upp, batch_size, expert_array, [], Options, []);
-
-    % populate H and effort
-    nX = size(X_inc_array, 1);
-    for j = 1:nX
-        H(j, np, solver_count) = hfun(fun(X_inc_array(j, :), 1:m));
-    end
-    effort(1:nX, np, solver_count) = nf_array;
-    catch
-        fprintf('This one failed. \n')
+        %% SOLVER 2 - UNIFORM ONLY
+        solver_count = solver_count + 1;
+        fun = @(x, Set)bendfo_wrapper(m, n, nprob, x, Set);
+        nf_max = simplex_grads*m*n;
+        batch_size = floor(m/2);
+        if seed_count == 1 % added this option for surrogate test. 
+            % sam-pounders specific:
+        
+            macro_seed = 88 + seed_count - 1;
+            rng(macro_seed);           
+            
+            expert_array = {@uniform_policy}; 
+            
+            [X_inc_array, nf_array, models] = sam_pounders_paper(fun, X0, n, nf_max, g_tol, delta_0, m, Low, Upp, batch_size, expert_array, [], Options, []);
+        
+            % populate H and effort
+            nX = size(X_inc_array, 1);
+            for j = 1:nX
+                H(j, np, solver_count) = hfun(fun(X_inc_array(j, :), 1:m));
+            end
+            effort(1:nX, np, solver_count) = nf_array;
+        end
+    
+         %% SOLVER 3 - LIPSCHITZ (SURROGATE) ONLY
+        solver_count = solver_count + 1;
+    
+        macro_seed = 88 + seed_count - 1;
+        rng(macro_seed);
+        
+        %expert_array = {@lipschitz_estimate_policy}; 
+        
+        surrogate_array = rbf_surrogates(@(x)bendfo_wrapper(m, n, nprob, x, 1:m), n, m, Low, Upp);
+        expert_array = {@(models, batch_size, sample_type, data)surrogate_informed_policy(models, batch_size, sample_type, data, surrogate_array, Low, Upp, spsolver)};
+        
+        [X_inc_array, nf_array, models] = sam_pounders_paper(fun, X0, n, nf_max, g_tol, delta_0, m, Low, Upp, batch_size, expert_array, [], Options, []);
+    
+        % populate H and effort
+        nX = size(X_inc_array, 1);
+        for j = 1:nX
+            H(j, np, solver_count) = hfun(fun(X_inc_array(j, :), 1:m));
+        end
+        effort(1:nX, np, solver_count) = nf_array;
+    
+         %% SOLVER 4 - MIXED DISTRIBUTIONS
+        solver_count = solver_count + 1;
+    
+        macro_seed = 88 + seed_count - 1;
+        rng(macro_seed);
+        
+        %expert_array = {@lipschitz_estimate_policy, @uniform_policy}; 
+        
+        expert_array = {@(models, batch_size, sample_type, data)surrogate_informed_policy(models, batch_size, sample_type, data, surrogate_array, Low, Upp, spsolver), @uniform_policy};
+        
+        [X_inc_array, nf_array, models] = sam_pounders_paper(fun, X0, n, nf_max, g_tol, delta_0, m, Low, Upp, batch_size, expert_array, [], Options, []);
+    
+        % populate H and effort
+        nX = size(X_inc_array, 1);
+        for j = 1:nX
+            H(j, np, solver_count) = hfun(fun(X_inc_array(j, :), 1:m));
+        end
+        effort(1:nX, np, solver_count) = nf_array;
+        catch
+            fprintf('This one failed. \n')
+        end
+        save(savestr,'H','effort','-mat');
     end
 end
 

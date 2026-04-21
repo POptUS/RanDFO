@@ -1,4 +1,4 @@
-function hl = perf_profile_budget(H, effort, gate, logplot)
+function hl = perf_profile_budget(H, effort, gate, logplot, num_seeds)
 %     This subroutine produces a performance profile as described in:
 %
 %     Benchmarking Derivative-Free Optimization Algorithms
@@ -35,6 +35,10 @@ for j = 1:ns
 end
 
 prob_min = min(min(H), [], 3);   % The minimum value seen for each problem
+prob_min = reshape(prob_min, [np / num_seeds, num_seeds]);
+prob_min = min(prob_min, [], 2)';
+prob_min = repmat(prob_min, 1, num_seeds);
+
 prob_max = H(1, :, 1);           % The starting value for each problem
 
 % For each problem and solver, determine the number of evaluations
@@ -56,13 +60,19 @@ end
 colors  = ['b' 'r' 'g' 'm' 'c' 'k' 'y'];
 lines   = {'-' '-.' '--'};
 markers = ['s' 'o' '^' 'v' 'p' '<' 'x' 'h' '+' 'd' '*' '<'];
+LW = 3;
 
 if nargin < 3
     logplot = 0;
 end
 
 % Compute ratios and divide by smallest element in each row.
-r = T ./ repmat(min(T, [], 2), 1, ns);
+min_cutoffs = min(T, [], 2);
+min_cutoffs = reshape(min_cutoffs, [np / num_seeds, num_seeds]);
+min_cutoffs = min(min_cutoffs, [], 2);
+min_cutoffs = repmat(min_cutoffs, num_seeds, 1);
+
+r = T ./ repmat(min_cutoffs, 1, ns);
 
 % Replace all NaN's with twice the max_ratio and sort.
 max_ratio = max(max(r));
@@ -86,9 +96,9 @@ for s = 1:ns
     sm = mod(s - 1, 12) + 1;
     option1 = [char(lines(sl)) colors(sc) markers(sm)];
     if logplot
-        hl(s) = semilogx(xs, ys, option1);
+        hl(s) = semilogx(xs, ys, option1, 'MarkerSize', 10, 'MarkerFaceColor', colors(sc), 'MarkerIndices', ceil(linspace(1,length(xs),10)),'LineWidth', LW);
     else
-        hl(s) = plot(xs, ys, option1);
+        hl(s) = plot(xs, ys, option1, 'MarkerSize', 10, 'MarkerFaceColor', colors(sc), 'MarkerIndices', ceil(linspace(1,length(xs),10)),'LineWidth', LW);
     end
     hold on;
 end

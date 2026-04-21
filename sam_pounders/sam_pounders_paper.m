@@ -55,7 +55,7 @@ else
     %[here_path, ~, ~] = fileparts(mfilename('fullpath'));
     %addpath(fullfile(here_path, 'general_h_funs'));
     hfun = @(F)sum(F.^2);
-    combinemodels = @leastsquares;
+    combinemodels = @combine_leastsquares;
 end
 if ~isfield(Options, 'spsolver')
     Options.spsolver = 2; % Use minq5 by default
@@ -150,7 +150,7 @@ else % Have other function values around
         % update nf in this scope:
         %nf = nf + models(id_tag).nf;        
     end
-    X_inc = X_0(xk_in); % explicitly store the current incumbent
+    X_inc = X_0(xk_in, :); % explicitly store the current incumbent
     X_inc_array = X_0;
 end
 nf = (n + 1) * m;
@@ -168,13 +168,13 @@ combined_probs = ones(1, m);
 
 % parameters for Exp4
 num_experts = length(expert_array);
-if num_experts > 1
+%if num_experts > 1
     K = nf_max / batch_size; % this is a guess of the maximum number of Exp4 rounds that can be played within budget. 
     fudge_factor = 10; 
-    Exp4gamma = fudge_factor * sqrt((m * log(num_experts)) / (batch_size * K));
-else
-    Exp4gamma = 1.0;
-end
+    Exp4gamma = fudge_factor * sqrt((m * log(max(2, num_experts))) / (batch_size * K));
+%else
+%    Exp4gamma = 1.0;
+%end
 
 % equal initial weights on experts by default (can/should be exposed) 
 weights_model = ones(num_experts, 1) / num_experts; 
